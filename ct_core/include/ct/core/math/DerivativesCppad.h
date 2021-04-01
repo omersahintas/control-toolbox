@@ -165,6 +165,23 @@ public:
         return adCppadFun_.SparseHessian(x, lambda);
     }
 
+    //! get Hessian sparsity pattern
+    /*!
+     * Auto-Diff automatically detects the sparsity pattern of the Jacobian. This method returns the pattern
+     * in row-column format. Row and columns contain the indeces of all non-zero entries.
+     *
+     * @param rows row indeces of non-zero entries
+     * @param columns column indeces of non-zero entries
+     */
+    virtual void getSparsityPatternHessian(Eigen::VectorXi& rows, Eigen::VectorXi& columns)
+    {
+        if (outputDim_ <= 0)
+            throw std::runtime_error("Outdim dim smaller 0; Define output dim in DerivativesCppad constructor");
+
+        //! todo: call sparsity pattern function from cppad
+        //! adCppadFun_.ForSparseHes();
+    }
+
 private:
     /**
      * @brief      Records the auto-diff terms
