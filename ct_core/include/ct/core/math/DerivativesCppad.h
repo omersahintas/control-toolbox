@@ -167,7 +167,7 @@ public:
 
     //! get Hessian sparsity pattern
     /*!
-     * Auto-Diff automatically detects the sparsity pattern of the Jacobian. This method returns the pattern
+     * Auto-Diff automatically detects the sparsity pattern of the Hessian. This method returns the pattern
      * in row-column format. Row and columns contain the indeces of all non-zero entries.
      *
      * @param rows row indeces of non-zero entries
