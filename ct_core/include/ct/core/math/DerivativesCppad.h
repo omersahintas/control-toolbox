@@ -178,9 +178,23 @@ public:
         if (outputDim_ <= 0)
             throw std::runtime_error("Outdim dim smaller 0; Define output dim in DerivativesCppad constructor");
 
-        //! todo: call sparsity pattern function from cppad
-        //! adCppadFun_.ForSparseHes();
+        // create sparsity pattern for row & column indices
+        CppAD::sparse_rc<Eigen::VectorXi> sparsity;
+
+        // include all components in sparsity pattern
+        bool internalBool = true;
+        Eigen::Matrix<bool, Eigen::Dynamic, 1> selectDomain(inputDim_);
+        selectDomain.fill(internalBool);
+        Eigen::Matrix<bool, Eigen::Dynamic, 1> selectRange(outputDim_);
+        selectRange.fill(internalBool);
+
+        adCppadFun_.for_hes_sparsity(selectDomain, selectRange, internalBool, sparsity);
+
+        // extract sparsity rows & columns
+        rows = sparsity.row();
+        columns = sparsity.col();
     }
+
 
 private:
     /**
