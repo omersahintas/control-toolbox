@@ -208,7 +208,13 @@ public:
         if (outputDim_ <= 0)
             throw std::runtime_error("Outdim dim smaller 0; Define output dim in DerivativesCppad constructor");
 
-        return adCppadFun_.SparseHessian(x, lambda);
+        // compute Hessian for i-th component function
+        std::string coloring = "cppad.symmetric";
+        CppAD::sparse_rcv<Eigen::VectorXi, Eigen::VectorXd> subset(sparsityHessian_);
+        CppAD::sparse_hes_work work;
+
+        adCppadFun_.sparse_hes(x, lambda, subset, sparsityHessian_, coloring, work);
+        return subset.val();
     }
 
     //! get Hessian sparsity pattern
