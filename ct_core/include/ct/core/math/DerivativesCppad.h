@@ -225,6 +225,24 @@ public:
         columns = sparsityHessian_.col();
     }
 
+    /**
+     * @brief Get number of non-zero entries in the Jacobian
+     */
+    size_t getNumNonZerosJacobian()
+    {
+        prepareJacobianSparsityPattern();
+        return sparsityJacobian_.nnz();
+    }
+
+    /**
+     * @brief Get number of non-zero entries in the Hessian
+     */
+    size_t getNumNonZerosHessian()
+    {
+        prepareHessianSparsityPattern();
+        return sparsityHessian_.nnz();
+    }
+
 private:
     void generateJacobianSparsityPattern()
     {
