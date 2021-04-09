@@ -93,6 +93,10 @@ public:
         inputDim_ = inputDim;
         if (outputDim_ > 0 && inputDim_ > 0)
             recordAd();
+
+        // after function update sparsity patterns must be recalculated
+        sparsityJacobianAvailable_ = false;
+        sparsityHessianAvailable_ = false;
     }
 
     //! destructor
@@ -129,6 +133,9 @@ public:
         if (outputDim_ <= 0)
             throw std::runtime_error("Outdim dim smaller 0; Define output dim in DerivativesCppad constructor");
 
+        // ensure Jacobian sparsity pattern is calculated in beforehand
+        prepareJacobianSparsityPattern();
+
         // maximum number of colors to group during a single forward sweep
         size_t group_max = 1;
 
@@ -151,33 +158,20 @@ public:
         return subset.val();
     }
 
+
     virtual void getSparsityPatternJacobian(Eigen::VectorXi& rows, Eigen::VectorXi& columns)
     {
         if (outputDim_ <= 0)
             throw std::runtime_error("Outdim dim smaller 0; Define output dim in DerivativesCppad constructor");
 
-        // create sparsity pattern for row & column indices
-        CppAD::sparse_rc<Eigen::VectorXi> sparsity;
-
-        // sparsity pattern for identity matrix
-        CppAD::sparse_rc<Eigen::VectorXi> pattern_in(inputDim_, inputDim_, inputDim_);
-        for (size_t k = 0; k < inputDim_; k++)
-            pattern_in.set(k, k, k);
-
-        // sparsity pattern for Jacobian
-        bool transpose = false;
-        bool dependency = false;
-        bool internal_bool = false;
-        CppAD::sparse_rc<Eigen::VectorXi> pattern_out;
-        adCppadFun_.for_jac_sparsity(pattern_in, transpose, dependency, internal_bool, pattern_out);
+        // ensure Jacobian sparsity pattern is calculated in beforehand
+        prepareJacobianSparsityPattern();
 
         // extract sparsity rows & columns
-        rows = pattern_out.row();
-        columns = pattern_out.row();
-
-        sparsityColsJacobianEigen_ = pattern_out.col();
-        sparsityColsJacobianEigen_ = pattern_out.col();
+        rows = sparsityJacobian_.row();
+        columns = sparsityJacobian_.col();
     }
+
 
     virtual HES_TYPE_D hessian(const Eigen::VectorXd& x, const Eigen::VectorXd& lambda)
     {
@@ -202,11 +196,13 @@ public:
         hes = adCppadFun_.SparseHessian(x, lambda);
     }
 
-
     virtual Eigen::VectorXd sparseHessianValues(const Eigen::VectorXd& x, const Eigen::VectorXd& lambda)
     {
         if (outputDim_ <= 0)
             throw std::runtime_error("Outdim dim smaller 0; Define output dim in DerivativesCppad constructor");
+
+        // ensure Hessian sparsity pattern is calculated in beforehand
+        prepareHessianSparsityPattern();
 
         // compute Hessian for i-th component function
         std::string coloring = "cppad.symmetric";
@@ -217,22 +213,35 @@ public:
         return subset.val();
     }
 
-    //! get Hessian sparsity pattern
-    /*!
-     * Auto-Diff automatically detects the sparsity pattern of the Hessian. This method returns the pattern
-     * in row-column format. Row and columns contain the indeces of all non-zero entries.
-     *
-     * @param rows row indeces of non-zero entries
-     * @param columns column indeces of non-zero entries
-     */
     virtual void getSparsityPatternHessian(Eigen::VectorXi& rows, Eigen::VectorXi& columns)
     {
         if (outputDim_ <= 0)
             throw std::runtime_error("Outdim dim smaller 0; Define output dim in DerivativesCppad constructor");
 
-        // create sparsity pattern for row & column indices
-        CppAD::sparse_rc<Eigen::VectorXi> sparsity;
+        // ensure Hessian sparsity pattern is calculated in beforehand
+        prepareHessianSparsityPattern();
 
+        rows = sparsityHessian_.row();
+        columns = sparsityHessian_.col();
+    }
+
+private:
+    void generateJacobianSparsityPattern()
+    {
+        // sparsity pattern for identity matrix
+        CppAD::sparse_rc<Eigen::VectorXi> pattern_in(inputDim_, inputDim_, inputDim_);
+        for (size_t k = 0; k < inputDim_; k++)
+            pattern_in.set(k, k, k);
+
+        // sparsity pattern for Jacobian
+        bool transpose = false;
+        bool dependency = false;
+        bool internal_bool = false;
+        adCppadFun_.for_jac_sparsity(pattern_in, transpose, dependency, internal_bool, sparsityJacobian_);
+    }
+
+    void generateHessianSparsityPattern()
+    {
         // include all components in sparsity pattern
         bool internalBool = true;
         Eigen::Matrix<bool, Eigen::Dynamic, 1> selectDomain(inputDim_);
@@ -240,15 +249,33 @@ public:
         Eigen::Matrix<bool, Eigen::Dynamic, 1> selectRange(outputDim_);
         selectRange.fill(internalBool);
 
-        adCppadFun_.for_hes_sparsity(selectDomain, selectRange, internalBool, sparsity);
-
-        // extract sparsity rows & columns
-        rows = sparsity.row();
-        columns = sparsity.col();
+        adCppadFun_.for_hes_sparsity(selectDomain, selectRange, internalBool, sparsityHessian_);
     }
 
+    /**
+     * @brief Performs lazy-evaluation on Jacobian sparsity pattern
+     */
+    void prepareJacobianSparsityPattern()
+    {
+        if (!sparsityJacobianAvailable_)
+        {
+            generateJacobianSparsityPattern();
+            sparsityJacobianAvailable_ = true;
+        }
+    }
 
-private:
+    /**
+     * @brief Performs lazy-evaluation on Hessian sparsity pattern
+     */
+    void prepareHessianSparsityPattern()
+    {
+        if (!sparsityHessianAvailable_)
+        {
+            generateHessianSparsityPattern();
+            sparsityHessianAvailable_ = true;
+        }
+    }
+
     /**
      * @brief      Records the auto-diff terms
      */
@@ -280,10 +307,15 @@ private:
     int inputDim_;   //! function input dimension
     int outputDim_;  //! function output dimension
 
+    // create sparsity pattern for row & column indices
+    CppAD::sparse_rc<Eigen::VectorXi> sparsityJacobian_;
+    CppAD::sparse_rc<Eigen::VectorXi> sparsityHessian_;
+
     CppAD::ADFun<double> adCppadFun_;
 
-    Eigen::VectorXi sparsityRowsJacobianEigen_;
-    Eigen::VectorXi sparsityColsJacobianEigen_;
+    // bools for lazy eval of sparsity patterns
+    bool sparsityJacobianAvailable_;
+    bool sparsityHessianAvailable_;
 };
 
 #endif
