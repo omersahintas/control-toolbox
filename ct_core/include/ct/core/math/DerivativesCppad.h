@@ -132,6 +132,33 @@ public:
         return adCppadFun_.SparseJacobian(x);
     }
 
+    virtual void getSparsityPatternJacobian(Eigen::VectorXi& rows, Eigen::VectorXi& columns)
+    {
+        if (outputDim_ <= 0)
+            throw std::runtime_error("Outdim dim smaller 0; Define output dim in DerivativesCppad constructor");
+
+        // create sparsity pattern for row & column indices
+        CppAD::sparse_rc<Eigen::VectorXi> sparsity;
+
+        // sparsity pattern for identity matrix
+        CppAD::sparse_rc<Eigen::VectorXi> pattern_in(inputDim_, inputDim_, inputDim_);
+        for (size_t k = 0; k < inputDim_; k++)
+            pattern_in.set(k, k, k);
+
+        // sparsity pattern for Jacobian
+        bool transpose = false;
+        bool dependency = false;
+        bool internal_bool = false;
+        CppAD::sparse_rc<Eigen::VectorXi> pattern_out;
+        adCppadFun_.for_jac_sparsity(pattern_in, transpose, dependency, internal_bool, pattern_out);
+
+        // extract sparsity rows & columns
+        rows = pattern_out.row();
+        columns = pattern_out.row();
+
+        sparsityColsJacobianEigen_ = pattern_out.col();
+        sparsityColsJacobianEigen_ = pattern_out.col();
+    }
 
     virtual HES_TYPE_D hessian(const Eigen::VectorXd& x, const Eigen::VectorXd& lambda)
     {
@@ -229,6 +256,9 @@ private:
     int outputDim_;  //! function output dimension
 
     CppAD::ADFun<double> adCppadFun_;
+
+    Eigen::VectorXi sparsityRowsJacobianEigen_;
+    Eigen::VectorXi sparsityColsJacobianEigen_;
 };
 
 #endif
