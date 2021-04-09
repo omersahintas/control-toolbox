@@ -129,7 +129,26 @@ public:
         if (outputDim_ <= 0)
             throw std::runtime_error("Outdim dim smaller 0; Define output dim in DerivativesCppad constructor");
 
-        return adCppadFun_.SparseJacobian(x);
+        // maximum number of colors to group during a single forward sweep
+        size_t group_max = 1;
+
+        // from cppadcg:
+        // "cppad.symmetric" may have missing values for functions using
+        // atomic functions which only provide half of the elements
+        // (some values could be zeroed)
+        std::string coloring = "cppad";
+
+        // create subset of the jacobian according to the sparsity pattern
+        CppAD::sparse_rcv<Eigen::VectorXi, Eigen::VectorXd> subset(sparsityJacobian_);
+
+        // temp structure for cppad
+        CppAD::sparse_jac_work work;
+
+        // evaluate the subset
+        adCppadFun_.sparse_jac_for(group_max, x, subset, sparsityJacobian_, coloring, work);
+
+        // return values of this subset
+        return subset.val();
     }
 
     virtual void getSparsityPatternJacobian(Eigen::VectorXi& rows, Eigen::VectorXi& columns)
